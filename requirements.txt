@@ -1,0 +1,2 @@
+protobuf>=3.5.2.post1
+git+https://github.com/roy2220/asyncio-toolkit.git@v0.0.1

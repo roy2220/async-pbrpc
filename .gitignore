@@ -1,0 +1,5 @@
+__pycache__
+/.mypy_cache
+/sample/.mypy_cache
+/.envrc
+/venv

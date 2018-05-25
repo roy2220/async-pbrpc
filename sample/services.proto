@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+import "async_pbrpc.proto";
+
+message GetNameResponse {
+    string name = 1;
+}
+
+service ClientService {
+    rpc get_name(async_pbrpc.Void) returns (GetNameResponse);
+}
+
+message SayHelloRequest {
+    string hello = 1;
+}
+
+message SayHelloResponse {
+    string hello = 1;
+}
+
+service ServerService {
+    rpc say_hello(SayHelloRequest) returns (SayHelloResponse);
+}

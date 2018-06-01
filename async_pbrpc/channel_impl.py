@@ -389,7 +389,7 @@ class ChannelImpl:
             method_call = self._pending_method_calls1.try_remove_head(False)
 
             if method_call is None:
-                waiting_for_method_call = self._sending_response = utils.wait_for(
+                waiting_for_method_call = self._sending_response = utils.wait_for2(
                     self._pending_method_calls1.remove_head(False),
                     self._get_min_heartbeat_interval(),
                     loop=loop,

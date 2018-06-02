@@ -57,18 +57,18 @@ class ChannelImpl:
                                                                 , self.get_loop())
         self._pending_method_calls2: typing.Dict[int, _MethodCall] = {}
         self._request_count = 0
-        self._service_handlers: typing.Dict[bytes, typing.Type[ServiceHandler]] = {}
+        self._service_handlers: typing.Dict[bytes, ServiceHandler] = {}
         self._calling_methods1: typing.Dict[int, asyncio.Task[None]] = {}
         self._calling_methods2: typing.Set[asyncio.Task[None]] = set()
         self._sending_response: asyncio.Future[typing.Optional[_MethodCall]] = utils\
             .make_done_future(self.get_loop())
 
-    def add_service_handler(self, service_handler: typing.Type[ServiceHandler]) -> None:
+    def add_service_handler(self, service_handler: ServiceHandler) -> None:
         assert service_handler.SERVICE_NAME not in self._service_handlers.keys()\
                , repr(service_handler.SERVICE_NAME)
         self._service_handlers[service_handler.SERVICE_NAME] = service_handler
 
-    def remove_service_handler(self, service_handler: typing.Type[ServiceHandler]) -> None:
+    def remove_service_handler(self, service_handler: ServiceHandler) -> None:
         del self._service_handlers[service_handler.SERVICE_NAME]
 
     async def connect(self, host_name: str, port_number: int
@@ -475,30 +475,12 @@ class ChannelImpl:
 
         service_handler = self._service_handlers.get(service_name, None)
 
-        if service_handler is None or method_index >= len(service_handler.METHOD_NAMES):
+        if service_handler is None:
             self._send_response(sequence_number, protocol_pb2.ERROR_NOT_IMPLEMENTED, b"")
             return
 
-        method = getattr(service_handler, service_handler.METHOD_NAMES[method_index])
-        request_class = service_handler.REQUEST_CLASSES[method_index]
-        requests: typing.Union[typing.Tuple[()], typing.Tuple[message.Message]]
-
-        if request_class is type(None):
-            requests = ()
-        else:
-            try:
-                requests = request_class.FromString(request_data),
-            except message.DecodeError:
-                self._send_response(sequence_number, protocol_pb2.ERROR_BAD_REQUEST, b"")
-                return
-
-        response_class = service_handler.RESPONSE_CLASSES[method_index]
-
         try:
-            response = method(self._owner, *requests)
-            response_is_awaitable = inspect.isawaitable(response)
-            assert response_is_awaitable or isinstance(response, response_class)\
-                   , repr((type(response), response_class))
+            response_data = service_handler.call_method(self._owner, method_index, request_data)
         except errors.Error as error:
             self._send_response(sequence_number, error.CODE, b"")
             return
@@ -509,9 +491,9 @@ class ChannelImpl:
             self._send_response(sequence_number, protocol_pb2.ERROR_INTERNAL_SERVER, b"")
             return
 
-        if not response_is_awaitable:
-            self._send_response(sequence_number, protocol_pb2.ERROR_NO, b"" if response_class \
-                is type(None) else response.SerializeToString())
+        if not inspect.isawaitable(response_data):
+            self._send_response(sequence_number, protocol_pb2.ERROR_NO  # type: ignore
+                                , response_data)
             return
 
         def cleanup(calling_method: "asyncio.Task[None]") -> None:
@@ -524,9 +506,7 @@ class ChannelImpl:
             del cleanup
 
             try:
-                response2 = await response
-                assert isinstance(response2, response_class), repr((type(response2)
-                                                                    , response_class))
+                response_data2 = await response_data  # type: ignore
             except asyncio.CancelledError:
                 self.get_logger().info("method call cancellation: channel_id={!r}"
                                        " sequence_number={!r} method_call={}"\
@@ -547,8 +527,7 @@ class ChannelImpl:
                     (service_name, method_index)))
                 self._send_response(sequence_number, protocol_pb2.ERROR_INTERNAL_SERVER, b"")
             else:
-                self._send_response(sequence_number, protocol_pb2.ERROR_NO, b"" if response_class \
-                    is type(None) else response2.SerializeToString())
+                self._send_response(sequence_number, protocol_pb2.ERROR_NO, response_data2)
 
             del self._calling_methods1[sequence_number]
 

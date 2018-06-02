@@ -19,8 +19,7 @@ class ClientServiceHandler(async_pbrpc.ServiceHandler):
     REQUEST_CLASSES: typing.ClassVar[typing.Tuple[_MessageClass, ...]] = _CLIENT_REQUEST_CLASSES
     RESPONSE_CLASSES: typing.ClassVar[typing.Tuple[_MessageClass, ...]] = _CLIENT_RESPONSE_CLASSES
 # --------------- METHOD IMPLEMENTATIONS BEGIN ---------------
-    @staticmethod
-    def get_name(channel) -> services_pb2.GetNameResponse:
+    def get_name(self, channel) -> services_pb2.GetNameResponse:
         raise async_pbrpc.NotImplementedError()
 # --------------- METHOD IMPLEMENTATIONS END ---------------
 class ClientServiceClient(async_pbrpc.ServiceClient):
@@ -43,8 +42,7 @@ class ServerServiceHandler(async_pbrpc.ServiceHandler):
     REQUEST_CLASSES: typing.ClassVar[typing.Tuple[_MessageClass, ...]] = _SERVER_REQUEST_CLASSES
     RESPONSE_CLASSES: typing.ClassVar[typing.Tuple[_MessageClass, ...]] = _SERVER_RESPONSE_CLASSES
 # --------------- METHOD IMPLEMENTATIONS BEGIN ---------------
-    @staticmethod
-    def say_hello(channel, request: services_pb2.SayHelloRequest) -> services_pb2.SayHelloResponse:
+    def say_hello(self, channel, request: services_pb2.SayHelloRequest) -> services_pb2.SayHelloResponse:
         raise async_pbrpc.NotImplementedError()
 # --------------- METHOD IMPLEMENTATIONS END ---------------
 class ServerServiceClient(async_pbrpc.ServiceClient):

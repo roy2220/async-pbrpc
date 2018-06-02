@@ -227,8 +227,7 @@ class {service_name}Handler(async_pbrpc.ServiceHandler):
                 part2 = f"{response_class_path}"
 
             file_content += f"""\
-    @staticmethod
-    def {method_name}(channel{part1}) -> {part2}:
+    def {method_name}(self, channel{part1}) -> {part2}:
         raise async_pbrpc.NotImplementedError()
 """
 

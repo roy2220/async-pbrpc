@@ -24,10 +24,10 @@ class Channel:
         self._is_stopping = False
         self._stop_callbacks: typing.List[ChannelStopCallback] = []
 
-    def add_service_handler(self, service_handler: typing.Type[ServiceHandler]) -> None:
+    def add_service_handler(self, service_handler: ServiceHandler) -> None:
         self._impl.add_service_handler(service_handler)
 
-    def remove_service_handler(self, service_handler: typing.Type[ServiceHandler]) -> None:
+    def remove_service_handler(self, service_handler: ServiceHandler) -> None:
         self._impl.remove_service_handler(service_handler)
 
     def add_stop_callback(self, stop_callback: ChannelStopCallback) -> None:

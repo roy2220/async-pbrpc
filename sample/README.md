@@ -42,8 +42,7 @@
 
 
   class ClientServiceHandler(services_pbrpc.ClientServiceHandler):
-      @staticmethod
-      def get_name(channel: async_pbrpc.Channel) -> services_pb2.GetNameResponse:
+      def get_name(self, channel: async_pbrpc.ClientChannel) -> services_pb2.GetNameResponse:
           name = "async-pbrpc"
           response = services_pb2.GetNameResponse(name=name)
           return response
@@ -51,7 +50,7 @@
 
   async def make_connection() -> None:
       channel = async_pbrpc.ClientChannel("127.0.0.1", 8888)
-      channel.add_service_handler(ClientServiceHandler)
+      channel.add_service_handler(ClientServiceHandler())
       await channel.start()
       service_client = services_pbrpc.ServerServiceClient(channel)
       request = services_pb2.SayHelloRequest(hello="hello")
@@ -78,8 +77,7 @@
 
 
   class ServerServiceHandler(services_pbrpc.ServerServiceHandler):
-      @staticmethod
-      async def say_hello(channel: async_pbrpc.Channel
+      async def say_hello(self, channel: async_pbrpc.ServerChannel
                           , request: services_pb2.SayHelloRequest) -> services_pb2.SayHelloResponse:
           service_client = services_pbrpc.ClientServiceClient(channel)
           response2 = await service_client.get_name()
@@ -96,7 +94,7 @@
       channel = async_pbrpc.ServerChannel(stream_reader, stream_writer)
       channels.add(channel)
       channel.add_stop_callback(lambda channel: channels.remove(channel))
-      channel.add_service_handler(ServerServiceHandler)
+      channel.add_service_handler(ServerServiceHandler())
       await channel.start()
 
 

@@ -7,8 +7,7 @@ import services_pbrpc
 
 
 class ServerServiceHandler(services_pbrpc.ServerServiceHandler):
-    @staticmethod
-    async def say_hello(channel: async_pbrpc.Channel
+    async def say_hello(self, channel: async_pbrpc.ServerChannel
                         , request: services_pb2.SayHelloRequest) -> services_pb2.SayHelloResponse:
         service_client = services_pbrpc.ClientServiceClient(channel)
         response2 = await service_client.get_name()
@@ -25,7 +24,7 @@ async def handle_connection(stream_reader: asyncio.StreamReader
     channel = async_pbrpc.ServerChannel(stream_reader, stream_writer)
     channels.add(channel)
     channel.add_stop_callback(lambda channel: channels.remove(channel))
-    channel.add_service_handler(ServerServiceHandler)
+    channel.add_service_handler(ServerServiceHandler())
     await channel.start()
 
 

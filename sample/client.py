@@ -7,8 +7,7 @@ import services_pbrpc
 
 
 class ClientServiceHandler(services_pbrpc.ClientServiceHandler):
-    @staticmethod
-    def get_name(channel: async_pbrpc.Channel) -> services_pb2.GetNameResponse:
+    def get_name(self, channel: async_pbrpc.ClientChannel) -> services_pb2.GetNameResponse:
         name = "async-pbrpc"
         response = services_pb2.GetNameResponse(name=name)
         return response
@@ -16,7 +15,7 @@ class ClientServiceHandler(services_pbrpc.ClientServiceHandler):
 
 async def make_connection() -> None:
     channel = async_pbrpc.ClientChannel("127.0.0.1", 8888)
-    channel.add_service_handler(ClientServiceHandler)
+    channel.add_service_handler(ClientServiceHandler())
     await channel.start()
     service_client = services_pbrpc.ServerServiceClient(channel)
     request = services_pb2.SayHelloRequest(hello="hello")

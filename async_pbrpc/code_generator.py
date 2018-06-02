@@ -90,12 +90,16 @@ def _process_service(sd: descriptor_pb2.ServiceDescriptorProto) -> None:
 
 def _process_method(md: descriptor_pb2.MethodDescriptorProto) -> None:
     for message_path in (md.input_type, md.output_type):
+        if message_path in _DUMMY_MESSAGE_PATHS:
+            continue
+
         file_path = _get_file_path(message_path)
 
         if file_path in _file_path_2_package_alias.keys():
             continue
 
-        package_path = _remove_postfix(file_path, ".proto").replace("/", ".") + "_pb2"
+        package_path = _remove_postfix(file_path, ".proto").replace("/", ".") \
+                       + _PACKAGE_NAME_POSTFIX
 
         try:
             i = package_path.rindex(".")
@@ -108,7 +112,13 @@ def _process_method(md: descriptor_pb2.MethodDescriptorProto) -> None:
 
         package_name_count = _package_name_counts.get(package_name, 0)
         _package_name_counts[package_name] = package_name_count + 1
-        package_alias = package_name + "_" + str(package_name_count)
+
+        if package_name_count == 0:
+            package_alias = package_name
+        else:
+            package_alias = package_name[:-len(_PACKAGE_NAME_POSTFIX)] + str(package_name_count) \
+                            + _PACKAGE_NAME_POSTFIX
+
         _package_importations.append((package_parent_path, package_name, package_alias))
         _file_path_2_package_alias[file_path] = package_alias
 
@@ -120,7 +130,12 @@ def _get_import_statements() -> str:
         if package_parent_path is not None:
             import_statements += f"from {package_parent_path} "
 
-        import_statements += f"import {package_name} as {package_alias}\n"
+        import_statements += f"import {package_name}"
+
+        if package_alias == package_name:
+            import_statements += "\n"
+        else:
+            import_statements += f" as {package_alias}\n"
 
     return import_statements
 
@@ -193,6 +208,7 @@ class {service_name}Handler(async_pbrpc.ServiceHandler):
     )
     REQUEST_CLASSES: typing.ClassVar[typing.Tuple[_MessageClass, ...]] = {request_classes_var_name}
     RESPONSE_CLASSES: typing.ClassVar[typing.Tuple[_MessageClass, ...]] = {response_classes_var_name}
+# --------------- METHOD IMPLEMENTATIONS BEGIN ---------------
 """
 
         for method_index, md in enumerate(sd.method):
@@ -214,6 +230,10 @@ class {service_name}Handler(async_pbrpc.ServiceHandler):
     @staticmethod
     def {method_name}(channel{part1}) -> {part2}:
         raise async_pbrpc.NotImplementedError()
+"""
+
+        file_content += """\
+# --------------- METHOD IMPLEMENTATIONS END ---------------
 """
 
         file_content += f"""\
@@ -273,5 +293,7 @@ def _remove_postfix(string: str, postfix: str) -> str:
     return string
 
 
+_PACKAGE_NAME_POSTFIX = "_pb2"
 _VOID_PATH = ".async_pbrpc.Void"
 _NO_RETURN_PATH = ".async_pbrpc.NoReturn"
+_DUMMY_MESSAGE_PATHS =  {_VOID_PATH, _NO_RETURN_PATH}

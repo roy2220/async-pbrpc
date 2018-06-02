@@ -3,14 +3,13 @@
 import typing
 from google.protobuf import message
 import async_pbrpc
-import async_pbrpc_pb2 as async_pbrpc_pb2_0
-import services_pb2 as services_pb2_0
+import services_pb2
 _MessageClass = typing.Union[typing.Type[message.Message], typing.Type[None]]
 _CLIENT_REQUEST_CLASSES: typing.Tuple[_MessageClass, ...] = (
     type(None),
 )
 _CLIENT_RESPONSE_CLASSES: typing.Tuple[_MessageClass, ...] = (
-    services_pb2_0.GetNameResponse,
+    services_pb2.GetNameResponse,
 )
 class ClientServiceHandler(async_pbrpc.ServiceHandler):
     SERVICE_NAME: typing.ClassVar[bytes] = b"CLIENT"
@@ -19,20 +18,22 @@ class ClientServiceHandler(async_pbrpc.ServiceHandler):
     )
     REQUEST_CLASSES: typing.ClassVar[typing.Tuple[_MessageClass, ...]] = _CLIENT_REQUEST_CLASSES
     RESPONSE_CLASSES: typing.ClassVar[typing.Tuple[_MessageClass, ...]] = _CLIENT_RESPONSE_CLASSES
+# --------------- METHOD IMPLEMENTATIONS BEGIN ---------------
     @staticmethod
-    def get_name(channel) -> services_pb2_0.GetNameResponse:
+    def get_name(channel) -> services_pb2.GetNameResponse:
         raise async_pbrpc.NotImplementedError()
+# --------------- METHOD IMPLEMENTATIONS END ---------------
 class ClientServiceClient(async_pbrpc.ServiceClient):
     SERVICE_NAME: typing.ClassVar[bytes] = b"CLIENT"
     REQUEST_CLASSES: typing.ClassVar[typing.Tuple[_MessageClass, ...]] = _CLIENT_REQUEST_CLASSES
     RESPONSE_CLASSES: typing.ClassVar[typing.Tuple[_MessageClass, ...]] = _CLIENT_RESPONSE_CLASSES
-    def get_name(self, *, auto_retry=False) -> typing.Coroutine[typing.Any, typing.Any, services_pb2_0.GetNameResponse]:
+    def get_name(self, *, auto_retry=False) -> typing.Coroutine[typing.Any, typing.Any, services_pb2.GetNameResponse]:
         return self.call_method(0, None, auto_retry)  # type: ignore
 _SERVER_REQUEST_CLASSES: typing.Tuple[_MessageClass, ...] = (
-    services_pb2_0.SayHelloRequest,
+    services_pb2.SayHelloRequest,
 )
 _SERVER_RESPONSE_CLASSES: typing.Tuple[_MessageClass, ...] = (
-    services_pb2_0.SayHelloResponse,
+    services_pb2.SayHelloResponse,
 )
 class ServerServiceHandler(async_pbrpc.ServiceHandler):
     SERVICE_NAME: typing.ClassVar[bytes] = b"SERVER"
@@ -41,12 +42,14 @@ class ServerServiceHandler(async_pbrpc.ServiceHandler):
     )
     REQUEST_CLASSES: typing.ClassVar[typing.Tuple[_MessageClass, ...]] = _SERVER_REQUEST_CLASSES
     RESPONSE_CLASSES: typing.ClassVar[typing.Tuple[_MessageClass, ...]] = _SERVER_RESPONSE_CLASSES
+# --------------- METHOD IMPLEMENTATIONS BEGIN ---------------
     @staticmethod
-    def say_hello(channel, request: services_pb2_0.SayHelloRequest) -> services_pb2_0.SayHelloResponse:
+    def say_hello(channel, request: services_pb2.SayHelloRequest) -> services_pb2.SayHelloResponse:
         raise async_pbrpc.NotImplementedError()
+# --------------- METHOD IMPLEMENTATIONS END ---------------
 class ServerServiceClient(async_pbrpc.ServiceClient):
     SERVICE_NAME: typing.ClassVar[bytes] = b"SERVER"
     REQUEST_CLASSES: typing.ClassVar[typing.Tuple[_MessageClass, ...]] = _SERVER_REQUEST_CLASSES
     RESPONSE_CLASSES: typing.ClassVar[typing.Tuple[_MessageClass, ...]] = _SERVER_RESPONSE_CLASSES
-    def say_hello(self, request: services_pb2_0.SayHelloRequest, *, auto_retry=False) -> typing.Coroutine[typing.Any, typing.Any, services_pb2_0.SayHelloResponse]:
+    def say_hello(self, request: services_pb2.SayHelloRequest, *, auto_retry=False) -> typing.Coroutine[typing.Any, typing.Any, services_pb2.SayHelloResponse]:
         return self.call_method(0, request, auto_retry)  # type: ignore

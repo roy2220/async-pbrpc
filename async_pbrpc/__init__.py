@@ -34,4 +34,4 @@ from .errors import (
     get_user_error_class,
 )
 
-__version__ = "0.0.0"
+__version__ = "0.0.2"

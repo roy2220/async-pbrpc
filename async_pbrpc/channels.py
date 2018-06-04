@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import ssl
 import time
 import typing
 
@@ -10,6 +9,7 @@ from asyncio_toolkit.typing import BytesLike, Coroutine
 
 from .channel_impl import ChannelImpl
 from .service_handler import ServiceHandler
+from .transport import TransportPolicy
 
 
 ChannelStopCallback = typing.Callable[[typing.Any], None]
@@ -18,9 +18,8 @@ ChannelStopCallback = typing.Callable[[typing.Any], None]
 class Channel:
     def __init__(self, impl: ChannelImpl) -> None:
         self._impl = impl
-        done_future: asyncio.Future[None] = utils.make_done_future(self.get_loop())
-        self._starting: asyncio.Future[None] = done_future
-        self._running: asyncio.Future[None] = done_future
+        self._starting: typing.Optional[utils.Future[None]] = None
+        self._running: asyncio.Future[None] = utils.make_done_future(self.get_loop())
         self._is_stopping = False
         self._stop_callbacks: typing.List[ChannelStopCallback] = []
 
@@ -39,21 +38,22 @@ class Channel:
     async def start(self) -> None:
         assert not self.is_running()
 
-        if not self._starting.done():
+        if self._starting is not None:
             await utils.shield(self._starting)
             return
 
-        running = self.get_loop().create_task(self._run())
         self._starting = utils.Future(loop=self.get_loop())
+        running = self.get_loop().create_task(self._run())
 
         try:
-            await utils.delay_cancellation(self._impl.wait_for_opened())
+            await utils.delay_cancellation(self._impl.wait_for_opened_unsafely())
         except Exception:
             running.cancel()
             await utils.delay_cancellation(running)
             raise
         finally:
             self._starting.set_result(None)
+            self._starting = None
             self._running = running
 
     def stop(self) -> None:
@@ -73,6 +73,9 @@ class Channel:
     def call_method_without_return(self) -> typing.Callable[[bytes, int, BytesLike, bool], bool]:
         return self._impl.call_method_without_return
 
+    def wait_for_stopped_unsafely(self) -> "asyncio.Future[None]":
+         return self._running
+
     def wait_for_stopped(self) -> "asyncio.Future[None]":
          return self._running if self._running.done() else utils.shield(self._running)
 
@@ -86,25 +89,28 @@ class Channel:
         return not self._running.done()
 
     def is_stopping(self) -> bool:
-        return not self._is_stopping
+        return self._is_stopping
 
     async def _run(self) -> None:
         raise NotImplementedError()
+
+
+_DEFAULT_CHANNEL_TIMEOUT = 5.0
+_DEFAULT_CHANNEL_WINDOW_SIZE = 1 << 12
 
 
 class ClientChannel(Channel):
     def __init__(self, host_name: str, port_number: int, *,
         loop: typing.Optional[asyncio.AbstractEventLoop]=None,
         logger: typing.Optional[logging.Logger]=None,
-        timeout=5.0,
-        outgoing_window_size=1 << 12,
-        incoming_window_size=1 << 12,
-        ssl_context: typing.Optional[ssl.SSLContext]=None,
+        transport_policy: typing.Optional[TransportPolicy]=None,
+        timeout=_DEFAULT_CHANNEL_TIMEOUT,
+        outgoing_window_size=_DEFAULT_CHANNEL_WINDOW_SIZE,
+        incoming_window_size=_DEFAULT_CHANNEL_WINDOW_SIZE,
     ) -> None:
-        super().__init__(ChannelImpl(self, loop, logger, timeout, outgoing_window_size
-                                     , incoming_window_size))
+        super().__init__(ChannelImpl(self, loop, logger, transport_policy, timeout
+                                     , outgoing_window_size, incoming_window_size))
         server_address = host_name, port_number
-        self._ssl_context = ssl_context
         self._server_addresses = DelayPool((server_address,), 3.0, self._impl.get_timeout()
                                            , self.get_loop(), self.get_logger())
 
@@ -125,7 +131,7 @@ class ClientChannel(Channel):
                 connect_deadline = self._server_addresses.when_next_item_allocable()
 
                 try:
-                    await self._impl.connect(*server_address, self._ssl_context, connect_deadline)
+                    await self._impl.connect(*server_address, connect_deadline)
                     channel_id = self._impl.get_id().hex()
                     self._server_addresses.reset(None, self._impl.get_timeout())
                     await self._impl.dispatch()
@@ -154,7 +160,7 @@ class ClientChannel(Channel):
         if not self._impl.is_closed():
             self._impl.close()
 
-        await self._impl.wait_for_called_methods()
+        await self._impl.wait_for_called_methods_unsafely()
         self._server_addresses.reset(None, None)
 
         for stop_callback in self._stop_callbacks:
@@ -169,15 +175,15 @@ class ClientChannel(Channel):
 
 
 class ServerChannel(Channel):
-    def __init__(self, stream_reader: asyncio.StreamReader, stream_writer: asyncio.StreamWriter, *,
-        loop: typing.Optional[asyncio.AbstractEventLoop]=None,
-        logger: typing.Optional[logging.Logger]=None,
-        timeout=5.0,
-        outgoing_window_size=1 << 12,
-        incoming_window_size=1 << 12,
+    def __init__(self, loop: asyncio.AbstractEventLoop, logger: logging.Logger
+                 , transport_policy: TransportPolicy, stream_reader: asyncio.StreamReader
+                 , stream_writer: asyncio.StreamWriter, *,
+        timeout=_DEFAULT_CHANNEL_TIMEOUT,
+        outgoing_window_size=_DEFAULT_CHANNEL_WINDOW_SIZE,
+        incoming_window_size=_DEFAULT_CHANNEL_WINDOW_SIZE,
     ) -> None:
-        super().__init__(ChannelImpl(self, loop, logger, timeout, outgoing_window_size
-                                     , incoming_window_size))
+        super().__init__(ChannelImpl(self, loop, logger, transport_policy, timeout
+                                     , outgoing_window_size, incoming_window_size))
         self._stream_rw = stream_reader, stream_writer
 
     async def _run(self) -> None:
@@ -213,7 +219,7 @@ class ServerChannel(Channel):
         if not self._impl.is_closed():
             self._impl.close()
 
-        await self._impl.wait_for_called_methods()
+        await self._impl.wait_for_called_methods_unsafely()
 
         for stop_callback in self._stop_callbacks:
             try:

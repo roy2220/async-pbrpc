@@ -6,6 +6,13 @@ from . import protocol_pb2
 class Error(Exception):
     CODE: typing.ClassVar[int] = protocol_pb2.ERROR_NO
 
+    def __init__(self, *args, is_remote: bool=False) -> None:
+        super().__init__(*args)
+        self._is_remote = is_remote
+
+    def is_remote(self) -> bool:
+        return self._is_remote
+
 
 _ERROR_CODE_2_ERROR_CLASS: typing.Dict[int, typing.Type[Error]] = {}
 
@@ -28,6 +35,11 @@ class ChannelBrokenError(Error):
 
 @_register_error(-2)
 class ChannelTimedOutError(Error):
+    pass
+
+
+@_register_error(-3)
+class MessageTooLargeError(Error):
     pass
 
 

@@ -2,7 +2,6 @@ import asyncio
 import enum
 import inspect
 import logging
-import ssl
 import time
 import typing
 import uuid
@@ -15,7 +14,7 @@ from google.protobuf import message
 from . import errors
 from . import protocol_pb2
 from .service_handler import ServiceHandler
-from .transport import Transport
+from .transport import TransportPolicy, Transport
 
 
 class _ChannelState(enum.IntEnum):
@@ -39,13 +38,14 @@ class _MethodCall(typing.NamedTuple):
 
 class ChannelImpl:
     def __init__(self, owner: "channels.Channel", loop: typing.Optional[asyncio.AbstractEventLoop]
-                 , logger: typing.Optional[logging.Logger], timeout: float
+                 , logger: typing.Optional[logging.Logger]
+                 , transport_policy: typing.Optional[TransportPolicy], timeout: float
                  , outgoing_window_size: int, incoming_window_size: int) -> None:
         assert timeout >= 0.0, repr(timeout)
         assert outgoing_window_size >= 0, repr(outgoing_window_size)
         assert incoming_window_size >= 0, repr(incoming_window_size)
         self._owner = owner
-        self._transport = Transport(loop, logger)
+        self._transport = Transport(loop, logger, transport_policy)
         self._timeout = timeout
         self._outgoing_window_size = outgoing_window_size
         self._incoming_window_size = incoming_window_size
@@ -71,12 +71,11 @@ class ChannelImpl:
     def remove_service_handler(self, service_handler: ServiceHandler) -> None:
         del self._service_handlers[service_handler.SERVICE_NAME]
 
-    async def connect(self, host_name: str, port_number: int
-                      , ssl_context: typing.Optional[ssl.SSLContext], connect_deadline: float):
+    async def connect(self, host_name: str, port_number: int, connect_deadline: float):
         self._set_state(_ChannelState.CONNECTING)
-        transport = Transport(self.get_loop(), self.get_logger())
+        transport = Transport(self.get_loop(), self.get_logger(), self._transport.get_policy())
         connect_timeout = max(connect_deadline - time.monotonic(), 0.0)
-        await transport.connect(host_name, port_number, ssl_context, connect_timeout)
+        await transport.connect(host_name, port_number, connect_timeout)
 
         try:
             handshake = protocol_pb2.Handshake(
@@ -118,7 +117,7 @@ class ChannelImpl:
     async def accept(self, stream_rw: typing.Tuple[asyncio.StreamReader, asyncio.StreamWriter]
                      , accept_deadline: float) -> None:
         self._set_state(_ChannelState.ACCEPTING)
-        transport = Transport(self.get_loop(), self.get_logger())
+        transport = Transport(self.get_loop(), self.get_logger(), self._transport.get_policy())
         transport.accept(*stream_rw)
 
         try:
@@ -243,10 +242,10 @@ class ChannelImpl:
             response_data=None,
         ))
 
-    def wait_for_opened(self) -> "asyncio.Future[None]":
+    def wait_for_opened_unsafely(self) -> "asyncio.Future[None]":
         return self._opening
 
-    async def wait_for_called_methods(self) -> None:
+    async def wait_for_called_methods_unsafely(self) -> None:
         while True:
             calling_method = next(iter(self._calling_methods2), None)
 
@@ -455,7 +454,8 @@ class ChannelImpl:
                 else:
                     error_class = errors.get_error_class(response_header.error_code)
                     error_message = "method_call: {!r}".format(method_call)
-                    method_call.response_data.set_exception(error_class(error_message))
+                    method_call.response_data.set_exception(error_class(error_message
+                                                                        , is_remote=True))
             elif message_type == protocol_pb2.MESSAGE_HEARTBEAT:
                 heartbeat = protocol_pb2.Heartbeat.FromString(data)
             else:
@@ -481,14 +481,19 @@ class ChannelImpl:
 
         try:
             response_data = service_handler.call_method(self._owner, method_index, request_data)
-        except errors.Error as error:
-            self._send_response(sequence_number, error.CODE, b"")
-            return
-        except Exception:
-            self.get_logger().exception("method call failure: channel_id={!r} sequence_number={!r}"
-                                        " method_call={}".format(self._id.hex(), sequence_number\
-                , _represent_method_call(service_name, method_index)))
-            self._send_response(sequence_number, protocol_pb2.ERROR_INTERNAL_SERVER, b"")
+        except Exception as exception:
+            if isinstance(exception, errors.Error) and exception.CODE >= 1 and not exception\
+                .is_remote():
+                self._send_response(sequence_number, exception.CODE, b"")
+            else:
+                self.get_logger().exception("method call failure: channel_id={!r}"
+                                            " sequence_number={!r} method_call={}".format(
+                    self._id.hex(), sequence_number,
+                    _represent_method_call(service_name, method_index),
+                ))
+
+                self._send_response(sequence_number, protocol_pb2.ERROR_INTERNAL_SERVER, b"")
+
             return
 
         if not inspect.isawaitable(response_data):
@@ -509,23 +514,28 @@ class ChannelImpl:
                 response_data2 = await response_data  # type: ignore
             except asyncio.CancelledError:
                 self.get_logger().info("method call cancellation: channel_id={!r}"
-                                       " sequence_number={!r} method_call={}"\
-                    .format(self._id.hex(), sequence_number, _represent_method_call\
-                    (service_name, method_index)))
+                                       " sequence_number={!r} method_call={}".format(
+                    self._id.hex(), sequence_number,
+                    _represent_method_call(service_name, method_index),
+                ))
 
                 if calling_method in self._calling_methods2:
                     self._calling_methods2.remove(calling_method)
                     raise
 
                 self._send_response(sequence_number, protocol_pb2.ERROR_INTERNAL_SERVER, b"")
-            except errors.Error as error:
-                self._send_response(sequence_number, error.CODE, b"")
-            except Exception:
-                self.get_logger().exception("method call failure: channel_id={!r}"
-                                            " sequence_number={!r} method_call={}"\
-                    .format(self._id.hex(), sequence_number, _represent_method_call\
-                    (service_name, method_index)))
-                self._send_response(sequence_number, protocol_pb2.ERROR_INTERNAL_SERVER, b"")
+            except Exception as exception:
+                if isinstance(exception, errors.Error) and exception.CODE >= 1 and not exception\
+                    .is_remote():
+                    self._send_response(sequence_number, exception.CODE, b"")
+                else:
+                    self.get_logger().exception("method call failure: channel_id={!r}"
+                                                " sequence_number={!r} method_call={}".format(
+                        self._id.hex(), sequence_number,
+                        _represent_method_call(service_name, method_index),
+                    ))
+
+                    self._send_response(sequence_number, protocol_pb2.ERROR_INTERNAL_SERVER, b"")
             else:
                 self._send_response(sequence_number, protocol_pb2.ERROR_NO, response_data2)
 

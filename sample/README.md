@@ -86,29 +86,30 @@
           return response
 
 
-  channels = set()
+  class Server(async_pbrpc.Server):
+      def create_channel(self, stream_reader: asyncio.StreamReader
+                         , stream_writer: asyncio.StreamWriter) -> async_pbrpc.ServerChannel:
+          channel = async_pbrpc.ServerChannel(
+              self.get_loop(), self.get_logger(), self.get_transport_policy(),
+              stream_reader,
+              stream_writer,
+          )
 
-
-  async def handle_connection(stream_reader: asyncio.StreamReader
-                              , stream_writer: asyncio.StreamWriter) -> None:
-      channel = async_pbrpc.ServerChannel(stream_reader, stream_writer)
-      channels.add(channel)
-      channel.add_stop_callback(lambda channel: channels.remove(channel))
-      channel.add_service_handler(ServerServiceHandler())
-      await channel.start()
+          channel.add_service_handler(ServerServiceHandler())
+          return channel
 
 
   loop = asyncio.get_event_loop()
-  server = loop.run_until_complete(asyncio.start_server(handle_connection, "127.0.0.1", 8888))
+  server = Server("127.0.0.1", 8888)
+  loop.run_until_complete(server.start())
 
   try:
       loop.run_forever()
   except KeyboardInterrupt:
       pass
 
-  server.close()
-  loop.run_until_complete(server.wait_closed())
-  loop.run_until_complete(asyncio.gather(*(channel.wait_for_stopped() for channel in channels)))
+  server.stop()
+  loop.run_until_complete(server.wait_for_stopped())
   loop.close()
   ```
 

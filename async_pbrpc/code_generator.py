@@ -227,7 +227,7 @@ class {service_name}Handler(async_pbrpc.ServiceHandler):
                 part2 = f"{response_class_path}"
 
             file_content += f"""\
-    def {method_name}(self, channel{part1}) -> {part2}:
+    def {method_name}(self, channel{part1}) -> typing.Union[{part2}, typing.Awaitable[{part2}]]:
         raise async_pbrpc.NotImplementedError()
 """
 

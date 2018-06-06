@@ -422,13 +422,15 @@ class ChannelImpl:
             message_type, data = await self._transport.read(self._timeout)
 
             if message_type == protocol_pb2.MESSAGE_REQUEST:
-                self._request_count += 1
+                if self._request_count == 0:
+                    self._request_count = len(self._calling_methods1) + 1
 
-                if self._request_count == 1:
                     def reset_request_count() -> None:
                         self._request_count = 0
 
                     loop.call_soon(reset_request_count)
+                else:
+                    self._request_count += 1
 
                 request = protocol_pb2.Request.FromString(data)
                 request_header = request.header
@@ -469,7 +471,7 @@ class ChannelImpl:
                 , _represent_method_call(service_name, method_index)))
             return
 
-        if self._request_count + len(self._calling_methods1) > self._incoming_window_size:
+        if self._request_count > self._incoming_window_size:
             self._send_response(sequence_number, protocol_pb2.ERROR_CHANNEL_BUSY, b"")
             return
 
@@ -506,7 +508,7 @@ class ChannelImpl:
 
         async def do() -> None:
             nonlocal cleanup
-            calling_method = asyncio.Task.current_task()
+            calling_method = asyncio.Task.current_task(self.get_loop())
             calling_method.remove_done_callback(cleanup)
             del cleanup
 

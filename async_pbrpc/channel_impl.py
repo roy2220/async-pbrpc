@@ -50,7 +50,7 @@ class ChannelImpl:
         self._outgoing_window_size = outgoing_window_size
         self._incoming_window_size = incoming_window_size
         self._state = _ChannelState.CLOSED
-        self._opening: asyncio.Future[None] = utils.Future(loop=self.get_loop())
+        self._opening: asyncio.Future[None] = self.get_loop().create_future()
         self._id = b""
         self._next_sequence_number = 0
         self._pending_method_calls1: Deque[_MethodCall] = Deque(_MIN_CHANNEL_WINDOW_SIZE
@@ -379,7 +379,7 @@ class ChannelImpl:
         if old_state is _ChannelState.CLOSED:
             self._opening.set_result(None)
         elif new_state is _ChannelState.CLOSED:
-            self._opening = utils.Future(loop=self.get_loop())
+            self._opening = self.get_loop().create_future()
 
     async def _send_requests_and_heartbeats(self) -> None:
         loop = self.get_loop()
@@ -388,7 +388,7 @@ class ChannelImpl:
             method_call = self._pending_method_calls1.try_remove_head(False)
 
             if method_call is None:
-                waiting_for_method_call = self._sending_response = utils.wait_for2(
+                waiting_for_method_call = self._sending_response = utils.wait_for1(
                     self._pending_method_calls1.remove_head(False),
                     self._get_min_heartbeat_interval(),
                     loop=loop,

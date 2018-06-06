@@ -33,6 +33,10 @@
 - [client.py](./client.py)
 
   ```python
+  from asyncio_toolkit import monkey_patch
+  monkey_patch.apply()
+
+
   import asyncio
 
   import async_pbrpc
@@ -68,6 +72,10 @@
 - [server.py](./server.py)
 
   ```python
+  from asyncio_toolkit import monkey_patch
+  monkey_patch.apply()
+
+
   import asyncio
 
   import async_pbrpc

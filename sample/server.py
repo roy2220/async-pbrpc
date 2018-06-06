@@ -1,3 +1,7 @@
+from asyncio_toolkit import monkey_patch
+monkey_patch.apply()
+
+
 import asyncio
 
 import async_pbrpc

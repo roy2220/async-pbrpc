@@ -20,7 +20,7 @@ class Server:
         self._transport_policy = dummy_transport.get_policy()
         self._address = host_name, port_number
         self._channels: typing.Set[ServerChannel] = set()
-        self._starting: typing.Optional[utils.Future[None]] = None
+        self._starting: typing.Optional[asyncio.Future[None]] = None
         self._running: asyncio.Future[None] = utils.make_done_future(self._loop)
         self._is_stopping = 0
         self._version = 0
@@ -33,17 +33,17 @@ class Server:
         assert not self.is_running()
 
         if self._starting is not None:
-            await utils.shield(self._starting)
+            await utils.shield(self._starting, loop=self._loop)
             return
 
-        self._starting = utils.Future(loop=self._loop)
+        self._starting = self._loop.create_future()
         running = self._loop.create_task(self._run())
 
         try:
-            await utils.delay_cancellation(self._starting)
+            await utils.delay_cancellation(self._starting, loop=self._loop)
         except Exception:
             running.cancel()
-            await utils.delay_cancellation(running)
+            await utils.delay_cancellation(running, loop=self._loop)
             raise
         finally:
             self._starting = None
@@ -71,7 +71,8 @@ class Server:
                              , stream_writer)
 
     def wait_for_stopped(self) -> "asyncio.Future[None]":
-         return self._running if self._running.done() else utils.shield(self._running)
+         return self._running if self._running.done() else utils.shield(self._running
+                                                                        , loop=self._loop)
 
     def get_loop(self) -> asyncio.AbstractEventLoop:
         return self._loop

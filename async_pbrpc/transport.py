@@ -38,7 +38,8 @@ class Transport:
         self._stream_reader: asyncio.StreamReader
         self._stream_writer: asyncio.StreamWriter
 
-    def connect(self, host_name: str, port_number: int, connect_timeout: float) -> Coroutine[None]:
+    def connect(self, host_name: str, port_number: int
+                , connect_timeout: float) -> "asyncio.Future[None]":
         assert self._is_closed
         return utils.wait_for1(self._connect(host_name, port_number), connect_timeout
                                , loop=self._loop)
@@ -63,7 +64,7 @@ class Transport:
 
     def read(self, read_timeout: float) -> Coroutine[typing.Tuple[int, bytes]]:
         assert not self._is_closed
-        return utils.wait_for1(self._read(), read_timeout, loop=self._loop)
+        return utils.wait_for2(self._read(), read_timeout, loop=self._loop)
 
     def close(self) -> None:
         assert not self._is_closed

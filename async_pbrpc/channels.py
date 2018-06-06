@@ -18,7 +18,7 @@ ChannelStopCallback = typing.Callable[[typing.Any], None]
 class Channel:
     def __init__(self, impl: ChannelImpl) -> None:
         self._impl = impl
-        self._starting: typing.Optional[utils.Future[None]] = None
+        self._starting: typing.Optional[asyncio.Future[None]] = None
         self._running: asyncio.Future[None] = utils.make_done_future(self.get_loop())
         self._is_stopping = False
         self._stop_callbacks: typing.List[ChannelStopCallback] = []
@@ -39,17 +39,18 @@ class Channel:
         assert not self.is_running()
 
         if self._starting is not None:
-            await utils.shield(self._starting)
+            await utils.shield(self._starting, loop=self.get_loop())
             return
 
-        self._starting = utils.Future(loop=self.get_loop())
+        self._starting = self.get_loop().create_future()
         running = self.get_loop().create_task(self._run())
 
         try:
-            await utils.delay_cancellation(self._impl.wait_for_opened_unsafely())
+            await utils.delay_cancellation(self._impl.wait_for_opened_unsafely()
+                                           , loop=self.get_loop())
         except Exception:
             running.cancel()
-            await utils.delay_cancellation(running)
+            await utils.delay_cancellation(running, loop=self.get_loop())
             raise
         finally:
             self._starting.set_result(None)
@@ -77,7 +78,8 @@ class Channel:
          return self._running
 
     def wait_for_stopped(self) -> "asyncio.Future[None]":
-         return self._running if self._running.done() else utils.shield(self._running)
+         return self._running if self._running.done() else utils.shield(self._running
+                                                                        , loop=self.get_loop())
 
     def get_loop(self) -> asyncio.AbstractEventLoop:
         return self._impl.get_loop()
